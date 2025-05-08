@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Search Results - SigmaX</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="search-result-area">
+      <a href="index.html">
+        <img class="search-logo-result" src="images/logo.png" />
+      </a>
+
+      <form
+        class="search-form"
+        id="search-form"
+        autocomplete="off"
+      >
+        <div class="search-form-input">
+          <input type="text" name="search" id="search-input" />
+          <img class="mic" src="./images/google_mic.svg" />
+          <img class="camera" src="./images/google_camera.svg" />
+          <img
+            class="search-icon-result"
+            src="./images/google_search_icon.svg"
+          />
+        </div>
+      </form>
+    </div>
+
+    <div id="results-summary"></div>
+    <div id="results"></div>
+    <div id="pagination"></div>
+
+    <script>
+      function addProtocolIfMissing(url) {
+        if (!/^https?:\/\//i.test(url)) {
+          return 'https://' + url;
+        }
+        return url;
+      }
+
+      function isLikelyURL(input) {
+        try {
+          const testUrl = new URL(addProtocolIfMissing(input));
+          return !!testUrl.hostname && testUrl.hostname.includes('.');
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function handleDomainRedirect(query) {
+        if (isLikelyURL(query)) {
+          const fullUrl = addProtocolIfMissing(query);
+          window.location.href = fullUrl;
+          return true;
+        }
+        return false;
+      }
+
+      function extractAllResults(topics) {
+        let results = [];
+        topics.forEach(item => {
+          if (item.FirstURL) {
+            results.push(item);
+          } else if (item.Topics && Array.isArray(item.Topics)) {
+            item.Topics.forEach(subItem => {
+              if (subItem.FirstURL) {
+                results.push(subItem);
+              }
+            });
+          }
+        });
+        return results;
+      }
+
+      async function fetchResults() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const query = urlParams.get('search');
+        document.getElementById('search-input').value = query || '';
+
+        if (!query) return;
+        if (handleDomainRedirect(query)) return;
+        if (query.startsWith('!')) {
+          window.location.href = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+          return;
+        }
+
+        const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json`);
+        const data = await response.json();
+
+        const resultsDiv = document.getElementById('results');
+        const resultsSummary = document.getElementById('results-summary');
+        resultsDiv.innerHTML = '';
+        resultsSummary.innerHTML = '';
+
+        const topics = data.RelatedTopics || [];
+        const mainResults = extractAllResults(topics);
+
+        if (mainResults.length === 0) {
+          resultsSummary.innerHTML = `<p>No results found for "<strong>${query}</strong>".</p>`;
+          return;
+        }
+
+        resultsSummary.innerHTML = `<p><strong>${mainResults.length}</strong> results found for "<strong>${query}</strong>":</p>`;
+
+        mainResults.forEach(item => {
+          const cleanUrl = item.FirstURL;
+
+          const resultDiv = document.createElement('div');
+          resultDiv.classList.add('result');
+
+          const titleLink = document.createElement('a');
+          titleLink.classList.add('result-title');
+          titleLink.href = cleanUrl;
+          titleLink.target = '_blank';
+          titleLink.textContent = item.Text;
+
+          const urlDiv = document.createElement('div');
+          urlDiv.classList.add('result-url');
+          urlDiv.textContent = cleanUrl;
+
+          const descriptionDiv = document.createElement('div');
+          descriptionDiv.classList.add('result-description');
+          descriptionDiv.innerHTML = item.Result || 'No description available.';
+
+          resultDiv.appendChild(titleLink);
+          resultDiv.appendChild(urlDiv);
+          resultDiv.appendChild(descriptionDiv);
+
+          resultsDiv.appendChild(resultDiv);
+        });
+      }
+
+      document.getElementById('search-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const input = document.getElementById('search-input').value.trim();
+
+        if (handleDomainRedirect(input)) return;
+
+        const newUrl = `search.html?search=${encodeURIComponent(input)}`;
+        window.history.pushState({}, '', newUrl);
+        fetchResults();
+      });
+
+      // Handle browser navigation (back/forward buttons)
+      window.addEventListener('popstate', fetchResults);
+
+      fetchResults();
+    </script>
+  </body>
+</html>
